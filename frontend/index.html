@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StockVibe - 실시간 주가 검색</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 50px; background-color: #f4f4f9; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; text-align: center; }
+        input { width: 80%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; }
+        button { width: 88%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #result { margin-top: 20px; font-weight: bold; font-size: 1.2em; color: #333; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📈 StockVibe</h1>
+        <input type="text" id="symbol" placeholder="주식 심볼 (예: AAPL, TSLA)" uppercase>
+        <button onclick="getStockPrice()">가격 조회</button>
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function getStockPrice() {
+            const symbol = document.getElementById('symbol').value;
+            const resultDiv = document.getElementById('result');
+            if (!symbol) return;
+
+            resultDiv.innerText = "조회 중...";
+            try {
+                // 백엔드 주소 (로컬 서버 기준)
+                const response = await fetch(`http://127.0.0.1:8000/stock/${symbol}`);
+                const data = await response.json();
+                
+                if (data.error) {
+                    resultDiv.innerText = "❌ 검색 결과 없음";
+                } else {
+                    resultDiv.innerText = `${data.symbol}: $${data.price}`;
+                }
+            } catch (error) {
+                resultDiv.innerText = "❌ 서버 연결 실패";
+            }
+        }
+    </script>
+</body>
+</html>
