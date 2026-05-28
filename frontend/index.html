@@ -3,45 +3,70 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StockVibe - 실시간 주가 검색</title>
+    <title>StockVibe - 주식 관리</title>
     <style>
-        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; padding-top: 50px; background-color: #f4f4f9; }
-        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 300px; text-align: center; }
-        input { width: 80%; padding: 10px; margin-bottom: 10px; border: 1px solid #ddd; border-radius: 5px; }
-        button { width: 88%; padding: 10px; background-color: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        button:hover { background-color: #0056b3; }
-        #result { margin-top: 20px; font-weight: bold; font-size: 1.2em; color: #333; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; padding: 40px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.1); width: 350px; margin-bottom: 20px; }
+        h1 { color: #1a73e8; margin-top: 0; }
+        input { width: calc(100% - 24px); padding: 10px; margin: 10px 0; border: 2px solid #eee; border-radius: 6px; outline: none; }
+        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+        button:hover { background-color: #1557b0; }
+        .watchlist-item { display: flex; justify-content: space-between; align-items: center; padding: 12px; border-bottom: 1px solid #eee; }
+        .watchlist-item:last-child { border-bottom: none; }
+        .delete-btn { width: auto; padding: 5px 10px; background-color: #ff4d4f; font-size: 0.8em; }
+        .price { color: #28a745; font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="container">
+    <div class="card">
         <h1>📈 StockVibe</h1>
-        <input type="text" id="symbol" placeholder="주식 심볼 (예: AAPL, TSLA)" uppercase>
-        <button onclick="getStockPrice()">가격 조회</button>
-        <div id="result"></div>
+        <input type="text" id="symbol" placeholder="종목 코드 (예: TSLA, AAPL)">
+        <button onclick="searchAndAdd()">종목 조회 및 추가</button>
+    </div>
+
+    <div class="card">
+        <h3>⭐ 내 관심 종목</h3>
+        <div id="watchlist"></div>
     </div>
 
     <script>
-        async function getStockPrice() {
-            const symbol = document.getElementById('symbol').value;
-            const resultDiv = document.getElementById('result');
-            if (!symbol) return;
+        const API_BASE = "http://127.0.0.1:8000";
 
-            resultDiv.innerText = "조회 중...";
+        async function loadWatchlist() {
+            const listDiv = document.getElementById('watchlist');
             try {
-                // 백엔드 주소 (로컬 서버 기준)
-                const response = await fetch(`http://127.0.0.1:8000/stock/${symbol}`);
+                const response = await fetch(`${API_BASE}/watchlist`);
                 const data = await response.json();
-                
-                if (data.error) {
-                    resultDiv.innerText = "❌ 검색 결과 없음";
-                } else {
-                    resultDiv.innerText = `${data.symbol}: $${data.price}`;
-                }
-            } catch (error) {
-                resultDiv.innerText = "❌ 서버 연결 실패";
-            }
+                listDiv.innerHTML = data.length ? "" : "리스트가 비어있습니다.";
+                data.forEach(item => {
+                    listDiv.innerHTML += `
+                        <div class="watchlist-item">
+                            <span><strong>${item.symbol}</strong></span>
+                            <span class="price">$${item.price}</span>
+                            <button class="delete-btn" onclick="removeFromWatchlist('${item.symbol}')">삭제</button>
+                        </div>`;
+                });
+            } catch (e) { listDiv.innerText = "데이터 로드 실패"; }
         }
+
+        async function searchAndAdd() {
+            const symbol = document.getElementById('symbol').value.toUpperCase();
+            if (!symbol) return;
+            try {
+                await fetch(`${API_BASE}/watchlist/${symbol}`, { method: 'POST' });
+                document.getElementById('symbol').value = "";
+                loadWatchlist();
+            } catch (e) { alert("추가 실패"); }
+        }
+
+        async function removeFromWatchlist(symbol) {
+            try {
+                await fetch(`${API_BASE}/watchlist/${symbol}`, { method: 'DELETE' });
+                loadWatchlist();
+            } catch (e) { alert("삭제 실패"); }
+        }
+
+        loadWatchlist(); // 시작할 때 로드
     </script>
 </body>
 </html>
