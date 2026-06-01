@@ -79,6 +79,25 @@ def get_stock_history(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 6. 종목별 최신 뉴스 조회
+@app.get("/stock/{symbol}/news")
+def get_stock_news(symbol: str):
+    try:
+        ticker = yf.Ticker(symbol)
+        news = ticker.news
+        # 최신 뉴스 5개만 추출하여 필요한 정보만 반환
+        result = []
+        for item in news[:5]:
+            result.append({
+                "title": item.get("title"),
+                "publisher": item.get("publisher"),
+                "link": item.get("link"),
+                "publishTime": item.get("providerPublishTime")
+            })
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 2. 관심 종목 전체 조회
 @app.get("/watchlist")
 def get_watchlist(db: Session = Depends(get_db)):

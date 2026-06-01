@@ -7,7 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; background-color: #f8f9fa; display: flex; flex-direction: column; align-items: center; padding: 40px; color: #333; }
-        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 450px; margin-bottom: 20px; }
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 480px; margin-bottom: 20px; }
         h1 { color: #1a73e8; margin-top: 0; font-size: 24px; text-align: center; }
         .input-group { display: flex; gap: 8px; margin-bottom: 20px; }
         input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; outline: none; transition: border 0.2s; }
@@ -28,9 +28,16 @@
         .action-btn { padding: 4px 8px; font-size: 0.8em; border-radius: 4px; font-weight: normal; border: 1px solid #ddd; background: white; color: #666; }
         .delete-btn { color: #ff4d4f; border-color: #ffefef; }
         .delete-btn:hover { background-color: #ff4d4f; color: white; }
-        .chart-btn:hover { background-color: #1a73e8; color: white; }
         #status { font-size: 0.8em; color: #888; margin-top: 10px; }
-        #chartContainer { display: none; margin-top: 20px; }
+        
+        /* 상세 섹션 스타일 */
+        #detailSection { display: none; margin-top: 20px; }
+        .detail-title { text-align: center; margin-bottom: 15px; color: #1a73e8; border-bottom: 2px solid #e8f0fe; padding-bottom: 10px; }
+        .news-item { margin-bottom: 15px; padding-bottom: 10px; border-bottom: 1px dashed #eee; }
+        .news-item:last-child { border-bottom: none; }
+        .news-title { font-weight: bold; display: block; color: #333; text-decoration: none; margin-bottom: 4px; }
+        .news-title:hover { color: #1a73e8; }
+        .news-meta { font-size: 0.8em; color: #888; }
     </style>
 </head>
 <body>
@@ -47,9 +54,18 @@
         <h3 style="margin-top:0">⭐ 내 관심 종목</h3>
         <div id="watchlist">로딩 중...</div>
         
-        <div id="chartContainer">
-            <h4 id="chartTitle" style="text-align: center; margin-bottom: 10px;"></h4>
-            <canvas id="stockChart"></canvas>
+        <div id="detailSection">
+            <h4 id="detailTitle" class="detail-title"></h4>
+            
+            <div style="margin-bottom: 30px;">
+                <h5 style="margin-bottom: 10px;">📊 주가 추세 (7일)</h5>
+                <canvas id="stockChart"></canvas>
+            </div>
+
+            <div>
+                <h5 style="margin-bottom: 10px;">📰 최신 뉴스</h5>
+                <div id="newsList">로딩 중...</div>
+            </div>
         </div>
     </div>
 
@@ -72,7 +88,7 @@
                     const sign = isUp ? '+' : '';
 
                     listDiv.innerHTML += `
-                        <div class="watchlist-item" onclick="showChart('${item.symbol}')">
+                        <div class="watchlist-item" onclick="showDetail('${item.symbol}')">
                             <div class="symbol-info">
                                 <span class="symbol-name">${item.symbol}</span>
                             </div>
@@ -95,29 +111,35 @@
             }
         }
 
-        async function showChart(symbol) {
-            const chartContainer = document.getElementById('chartContainer');
-            const ctx = document.getElementById('stockChart').getContext('2d');
-            document.getElementById('chartTitle').innerText = `${symbol} 최근 7일 추세`;
-            chartContainer.style.display = 'block';
+        async function showDetail(symbol) {
+            document.getElementById('detailSection').style.display = 'block';
+            document.getElementById('detailTitle').innerText = `${symbol} 상세 정보`;
+            
+            // 차트와 뉴스 병렬 로드
+            await Promise.all([
+                loadChart(symbol),
+                loadNews(symbol)
+            ]);
+            
+            document.getElementById('detailSection').scrollIntoView({ behavior: 'smooth' });
+        }
 
+        async function loadChart(symbol) {
+            const ctx = document.getElementById('stockChart').getContext('2d');
             try {
                 const response = await fetch(`${API_BASE}/stock/${symbol}/history`);
                 const data = await response.json();
-
                 const labels = data.map(d => d.date);
                 const prices = data.map(d => d.price);
 
-                if (stockChart) {
-                    stockChart.destroy();
-                }
+                if (stockChart) stockChart.destroy();
 
                 stockChart = new Chart(ctx, {
                     type: 'line',
                     data: {
                         labels: labels,
                         datasets: [{
-                            label: '종가 (USD)',
+                            label: '종가',
                             data: prices,
                             borderColor: '#1a73e8',
                             backgroundColor: 'rgba(26, 115, 232, 0.1)',
@@ -127,20 +149,35 @@
                     },
                     options: {
                         responsive: true,
-                        plugins: {
-                            legend: { display: false }
-                        },
-                        scales: {
-                            y: { beginAtZero: false }
-                        }
+                        plugins: { legend: { display: false } }
                     }
                 });
-                
-                // 차트 위치로 스크롤
-                chartContainer.scrollIntoView({ behavior: 'smooth' });
+            } catch (e) { console.error("차트 로드 실패"); }
+        }
 
-            } catch (e) {
-                alert("차트 데이터를 가져오는데 실패했습니다.");
+        async function loadNews(symbol) {
+            const newsDiv = document.getElementById('newsList');
+            newsDiv.innerHTML = "뉴스를 불러오는 중...";
+            try {
+                const response = await fetch(`${API_BASE}/stock/${symbol}/news`);
+                const data = await response.json();
+                
+                if (!data || data.length === 0) {
+                    newsDiv.innerHTML = "관련 뉴스가 없습니다.";
+                    return;
+                }
+
+                newsDiv.innerHTML = "";
+                data.forEach(item => {
+                    const date = new Date(item.publishTime * 1000).toLocaleString();
+                    newsDiv.innerHTML += `
+                        <div class="news-item">
+                            <a href="${item.link}" target="_blank" class="news-title">${item.title}</a>
+                            <div class="news-meta">${item.publisher} • ${date}</div>
+                        </div>`;
+                });
+            } catch (e) { 
+                newsDiv.innerText = "뉴스 로드 실패"; 
             }
         }
 
@@ -163,8 +200,8 @@
             if (!confirm(`${symbol} 삭제하시겠습니까?`)) return;
             try {
                 await fetch(`${API_BASE}/watchlist/${symbol}`, { method: 'DELETE' });
-                if (stockChart && document.getElementById('chartTitle').innerText.includes(symbol)) {
-                    document.getElementById('chartContainer').style.display = 'none';
+                if (document.getElementById('detailTitle').innerText.includes(symbol)) {
+                    document.getElementById('detailSection').style.display = 'none';
                 }
                 loadWatchlist();
             } catch (e) { alert("삭제 실패"); }
