@@ -4,27 +4,33 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>StockVibe - 주식 관리</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif; background-color: #f8f9fa; display: flex; flex-direction: column; align-items: center; padding: 40px; color: #333; }
-        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 400px; margin-bottom: 20px; }
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 450px; margin-bottom: 20px; }
         h1 { color: #1a73e8; margin-top: 0; font-size: 24px; text-align: center; }
         .input-group { display: flex; gap: 8px; margin-bottom: 20px; }
         input { flex: 1; padding: 12px; border: 1px solid #ddd; border-radius: 8px; outline: none; transition: border 0.2s; }
         input:focus { border-color: #1a73e8; }
         button { padding: 12px 20px; background-color: #1a73e8; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: opacity 0.2s; }
         button:hover { opacity: 0.9; }
-        .watchlist-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #f1f1f1; }
+        .watchlist-item { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #f1f1f1; cursor: pointer; }
+        .watchlist-item:hover { background-color: #fcfcfc; }
         .watchlist-item:last-child { border-bottom: none; }
         .symbol-info { display: flex; flex-direction: column; }
         .symbol-name { font-weight: 700; font-size: 1.1em; }
         .price-info { text-align: right; }
         .price { font-size: 1.1em; font-weight: bold; }
         .change { font-size: 0.9em; margin-top: 2px; }
-        .up { color: #d60000; } /* 한국식 빨간색 상승 */
-        .down { color: #0051c7; } /* 한국식 파란색 하락 */
-        .delete-btn { padding: 4px 8px; background-color: #ffefef; color: #ff4d4f; font-size: 0.8em; border-radius: 4px; margin-left: 10px; font-weight: normal; }
+        .up { color: #d60000; }
+        .down { color: #0051c7; }
+        .btn-group { display: flex; gap: 5px; }
+        .action-btn { padding: 4px 8px; font-size: 0.8em; border-radius: 4px; font-weight: normal; border: 1px solid #ddd; background: white; color: #666; }
+        .delete-btn { color: #ff4d4f; border-color: #ffefef; }
         .delete-btn:hover { background-color: #ff4d4f; color: white; }
+        .chart-btn:hover { background-color: #1a73e8; color: white; }
         #status { font-size: 0.8em; color: #888; margin-top: 10px; }
+        #chartContainer { display: none; margin-top: 20px; }
     </style>
 </head>
 <body>
@@ -40,10 +46,16 @@
     <div class="card">
         <h3 style="margin-top:0">⭐ 내 관심 종목</h3>
         <div id="watchlist">로딩 중...</div>
+        
+        <div id="chartContainer">
+            <h4 id="chartTitle" style="text-align: center; margin-bottom: 10px;"></h4>
+            <canvas id="stockChart"></canvas>
+        </div>
     </div>
 
     <script>
         const API_BASE = "http://127.0.0.1:8000";
+        let stockChart = null;
 
         async function loadWatchlist() {
             const listDiv = document.getElementById('watchlist');
@@ -60,7 +72,7 @@
                     const sign = isUp ? '+' : '';
 
                     listDiv.innerHTML += `
-                        <div class="watchlist-item">
+                        <div class="watchlist-item" onclick="showChart('${item.symbol}')">
                             <div class="symbol-info">
                                 <span class="symbol-name">${item.symbol}</span>
                             </div>
@@ -71,13 +83,64 @@
                                         ${sign}${item.change.toLocaleString()} (${sign}${item.changesPercentage}%)
                                     </div>
                                 </div>
-                                <button class="delete-btn" onclick="removeFromWatchlist('${item.symbol}')">삭제</button>
+                                <div class="btn-group" style="margin-left: 15px;">
+                                    <button class="action-btn delete-btn" onclick="event.stopPropagation(); removeFromWatchlist('${item.symbol}')">삭제</button>
+                                </div>
                             </div>
                         </div>`;
                 });
                 statusDiv.innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
             } catch (e) { 
-                listDiv.innerText = "서버에 연결할 수 없습니다. 백엔드를 실행해 주세요."; 
+                listDiv.innerText = "서버에 연결할 수 없습니다."; 
+            }
+        }
+
+        async function showChart(symbol) {
+            const chartContainer = document.getElementById('chartContainer');
+            const ctx = document.getElementById('stockChart').getContext('2d');
+            document.getElementById('chartTitle').innerText = `${symbol} 최근 7일 추세`;
+            chartContainer.style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_BASE}/stock/${symbol}/history`);
+                const data = await response.json();
+
+                const labels = data.map(d => d.date);
+                const prices = data.map(d => d.price);
+
+                if (stockChart) {
+                    stockChart.destroy();
+                }
+
+                stockChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: '종가 (USD)',
+                            data: prices,
+                            borderColor: '#1a73e8',
+                            backgroundColor: 'rgba(26, 115, 232, 0.1)',
+                            fill: true,
+                            tension: 0.3
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: { beginAtZero: false }
+                        }
+                    }
+                });
+                
+                // 차트 위치로 스크롤
+                chartContainer.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (e) {
+                alert("차트 데이터를 가져오는데 실패했습니다.");
             }
         }
 
@@ -91,23 +154,23 @@
                     input.value = "";
                     loadWatchlist();
                 } else {
-                    alert("추가에 실패했습니다. 올바른 종목 코드인지 확인해 주세요.");
+                    alert("추가 실패. 종목 코드를 확인하세요.");
                 }
             } catch (e) { alert("서버 연결 실패"); }
         }
 
         async function removeFromWatchlist(symbol) {
-            if (!confirm(`${symbol} 종목을 삭제하시겠습니까?`)) return;
+            if (!confirm(`${symbol} 삭제하시겠습니까?`)) return;
             try {
                 await fetch(`${API_BASE}/watchlist/${symbol}`, { method: 'DELETE' });
+                if (stockChart && document.getElementById('chartTitle').innerText.includes(symbol)) {
+                    document.getElementById('chartContainer').style.display = 'none';
+                }
                 loadWatchlist();
             } catch (e) { alert("삭제 실패"); }
         }
 
-        // 초기 로드
         loadWatchlist();
-
-        // 60초마다 자동 갱신
         setInterval(loadWatchlist, 60000);
     </script>
 </body>

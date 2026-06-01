@@ -63,6 +63,22 @@ def get_stock_price(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 5. 종목별 최근 주가 이력 조회 (7일)
+@app.get("/stock/{symbol}/history")
+def get_stock_history(symbol: str):
+    try:
+        ticker = yf.Ticker(symbol)
+        data = ticker.history(period="7d")
+        if data.empty:
+            raise HTTPException(status_code=404, detail="History not found")
+        history = [
+            {"date": str(date.date()), "price": round(price, 2)}
+            for date, price in zip(data.index, data['Close'])
+        ]
+        return history
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 2. 관심 종목 전체 조회
 @app.get("/watchlist")
 def get_watchlist(db: Session = Depends(get_db)):
