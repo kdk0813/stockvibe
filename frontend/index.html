@@ -86,7 +86,7 @@
             <button onclick="searchStock()">검색</button>
         </div>
         <div id="searchResults"></div>
-        <div id="status">최근 업데이트: -</div>
+        <div id="status">서버 연결 확인 중...</div>
     </div>
 
     <div class="card">
@@ -104,8 +104,7 @@
     </div>
 
     <script>
-        const API_BASE = "http://127.0.0.1:8000";
-        let stockChart = null;
+        const API_BASE = "http://localhost:8000"; // 127.0.0.1 대신 localhost 사용 시도
 
         // --- 테마 관리 ---
         function toggleTheme() {
@@ -131,63 +130,84 @@
             stockChart.update();
         }
 
-        // 초기 테마 설정
         const savedTheme = localStorage.getItem('theme') || 'light';
         setTheme(savedTheme);
 
-        // --- 검색 및 추가 기능 ---
+        // --- 데이터 요청 유틸리티 ---
+        async function apiFetch(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                if (!response.ok) throw new Error('API Error');
+                return await response.json();
+            } catch (e) {
+                console.error(`Fetch error (${endpoint}):`, e);
+                return null;
+            }
+        }
+
+        // --- 검색 기능 ---
         async function searchStock() {
             const query = document.getElementById('symbolInput').value.trim();
             if (!query) return;
             const resultsDiv = document.getElementById('searchResults');
             resultsDiv.innerHTML = "<div style='padding:10px; font-size:0.9em;'>검색 중...</div>";
             resultsDiv.style.display = 'block';
-            try {
-                const response = await fetch(`${API_BASE}/search/${query}`);
-                const data = await response.json();
-                if (data.length === 0) { resultsDiv.innerHTML = "<div style='padding:10px;'>결과 없음</div>"; return; }
-                resultsDiv.innerHTML = "";
-                data.forEach(item => {
-                    resultsDiv.innerHTML += `<div class="search-item">
-                        <div class="search-info"><span class="search-symbol">${item.symbol}</span><span class="search-name">${item.name}</span></div>
-                        <button style="padding:4px 10px; font-size:0.8em; background:#34a853;" onclick="addFromSearch('${item.symbol}')">추가</button>
-                    </div>`;
-                });
-            } catch (e) { resultsDiv.innerHTML = "실패"; }
+
+            const data = await apiFetch(`/search/${encodeURIComponent(query)}`);
+            if (!data || data.length === 0) {
+                resultsDiv.innerHTML = `<div style='padding:10px;'>결과가 없습니다. (서버 연결 확인 필요)</div>`;
+                return;
+            }
+
+            resultsDiv.innerHTML = "";
+            data.forEach(item => {
+                resultsDiv.innerHTML += `<div class="search-item">
+                    <div class="search-info"><span class="search-symbol">${item.symbol}</span><span class="search-name">${item.name}</span></div>
+                    <button style="padding:4px 10px; font-size:0.8em; background:#34a853;" onclick="addFromSearch('${item.symbol}')">추가</button>
+                </div>`;
+            });
         }
 
         async function addFromSearch(symbol) {
-            await fetch(`${API_BASE}/watchlist/${symbol}`, { method: 'POST' });
-            document.getElementById('symbolInput').value = "";
-            document.getElementById('searchResults').style.display = 'none';
-            loadWatchlist();
+            const res = await apiFetch(`/watchlist/${symbol}`, { method: 'POST' });
+            if (res) {
+                document.getElementById('symbolInput').value = "";
+                document.getElementById('searchResults').style.display = 'none';
+                loadWatchlist();
+            } else {
+                alert("추가에 실패했습니다. 서버가 실행 중인지 확인하세요.");
+            }
         }
 
         async function loadWatchlist() {
             const listDiv = document.getElementById('watchlist');
             const statusDiv = document.getElementById('status');
-            try {
-                const response = await fetch(`${API_BASE}/watchlist`);
-                const data = await response.json();
-                listDiv.innerHTML = data.length ? "" : "리스트가 비어있습니다.";
-                data.forEach(item => {
-                    const isUp = item.change > 0;
-                    const colorClass = isUp ? 'up' : (item.change < 0 ? 'down' : '');
-                    const sign = isUp ? '+' : '';
-                    listDiv.innerHTML += `
-                        <div class="watchlist-item" onclick="showDetail('${item.symbol}')">
-                            <div class="symbol-info"><span class="symbol-name">${item.symbol}</span></div>
-                            <div style="display:flex; align-items:center;">
-                                <div style="text-align:right;">
-                                    <div class="price">${item.price.toLocaleString()}</div>
-                                    <div class="${colorClass}">${sign}${item.change.toLocaleString()} (${sign}${item.changesPercentage}%)</div>
-                                </div>
-                                <button class="action-btn delete-btn" style="margin-left:15px;" onclick="event.stopPropagation(); removeFromWatchlist('${item.symbol}')">삭제</button>
+            const data = await apiFetch(`/watchlist`);
+            
+            if (data === null) {
+                listDiv.innerText = "서버에 연결할 수 없습니다. 백엔드를 다시 실행해 주세요.";
+                statusDiv.innerText = "상태: 서버 연결 실패";
+                return;
+            }
+
+            listDiv.innerHTML = data.length ? "" : "관심 종목이 없습니다. 검색하여 추가해 보세요.";
+            data.forEach(item => {
+                const isUp = item.change > 0;
+                const colorClass = isUp ? 'up' : (item.change < 0 ? 'down' : '');
+                const sign = isUp ? '+' : '';
+                listDiv.innerHTML += `
+                    <div class="watchlist-item" onclick="showDetail('${item.symbol}')">
+                        <div class="symbol-info"><span class="symbol-name">${item.symbol}</span></div>
+                        <div style="display:flex; align-items:center;">
+                            <div style="text-align:right;">
+                                <div class="price">${item.price.toLocaleString()}</div>
+                                <div class="${colorClass}">${sign}${item.change.toLocaleString()} (${sign}${item.changesPercentage}%)</div>
                             </div>
-                        </div>`;
-                });
-                statusDiv.innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
-            } catch (e) { listDiv.innerText = "연결 실패"; }
+                            <button class="action-btn delete-btn" style="margin-left:15px;" onclick="event.stopPropagation(); removeFromWatchlist('${item.symbol}')">삭제</button>
+                        </div>
+                    </div>`;
+            });
+            statusDiv.innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
         }
 
         async function showDetail(symbol) {
@@ -198,8 +218,8 @@
         }
 
         async function loadInfo(symbol) {
-            const response = await fetch(`${API_BASE}/stock/${symbol}/info`);
-            const data = await response.json();
+            const data = await apiFetch(`/stock/${symbol}/info`);
+            if (!data) return;
             document.getElementById('companyName').innerText = data.longName;
             document.getElementById('companySummary').innerText = data.longBusinessSummary;
             const formatCap = (cap) => cap >= 1e12 ? (cap/1e12).toFixed(2)+'T' : cap >= 1e9 ? (cap/1e9).toFixed(2)+'B' : cap >= 1e6 ? (cap/1e6).toFixed(2)+'M' : cap.toLocaleString();
@@ -211,8 +231,8 @@
         }
 
         async function loadChart(symbol) {
-            const response = await fetch(`${API_BASE}/stock/${symbol}/history`);
-            const data = await response.json();
+            const data = await apiFetch(`/stock/${symbol}/history`);
+            if (!data) return;
             const ctx = document.getElementById('stockChart').getContext('2d');
             const theme = document.documentElement.getAttribute('data-theme');
             const textColor = theme === 'dark' ? '#bbbbbb' : '#666666';
@@ -236,21 +256,22 @@
         }
 
         async function loadNews(symbol) {
-            const response = await fetch(`${API_BASE}/stock/${symbol}/news`);
-            const data = await response.json();
+            const data = await apiFetch(`/stock/${symbol}/news`);
             const newsDiv = document.getElementById('newsList');
-            newsDiv.innerHTML = data.length ? "" : "뉴스 없음";
-            data.forEach(item => {
-                newsDiv.innerHTML += `<div class="news-item">
-                    <a href="${item.link}" target="_blank" class="news-title">${item.title}</a>
-                    <div class="news-meta">${item.publisher} • ${new Date(item.publishTime * 1000).toLocaleString()}</div>
-                </div>`;
-            });
+            newsDiv.innerHTML = (data && data.length) ? "" : "뉴스가 없습니다.";
+            if (data) {
+                data.forEach(item => {
+                    newsDiv.innerHTML += `<div class="news-item">
+                        <a href="${item.link}" target="_blank" class="news-title">${item.title}</a>
+                        <div class="news-meta">${item.publisher} • ${new Date(item.publishTime * 1000).toLocaleString()}</div>
+                    </div>`;
+                });
+            }
         }
 
         async function removeFromWatchlist(symbol) {
             if (!confirm(`${symbol} 삭제?`)) return;
-            await fetch(`${API_BASE}/watchlist/${symbol}`, { method: 'DELETE' });
+            await apiFetch(`/watchlist/${symbol}`, { method: 'DELETE' });
             if (document.getElementById('detailTitle').innerText.includes(symbol)) document.getElementById('detailSection').style.display = 'none';
             loadWatchlist();
         }
