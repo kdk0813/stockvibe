@@ -121,6 +121,26 @@ def get_stock_info(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 8. 종목 검색 (이름 또는 키워드)
+@app.get("/search/{query}")
+def search_stock(query: str):
+    try:
+        search = yf.Search(query, max_results=10)
+        results = []
+        for quote in search.quotes:
+            symbol = quote.get("symbol")
+            name = quote.get("longname") or quote.get("shortname")
+            exch = quote.get("exchange")
+            if symbol and name:
+                results.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "exchange": exch
+                })
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 2. 관심 종목 전체 조회
 @app.get("/watchlist")
 def get_watchlist(db: Session = Depends(get_db)):
