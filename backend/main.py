@@ -98,6 +98,29 @@ def get_stock_news(symbol: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+# 7. 종목별 기업 상세 정보 조회
+@app.get("/stock/{symbol}/info")
+def get_stock_info(symbol: str):
+    try:
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        
+        # 주요 지표 추출 (데이터가 없는 경우를 대비해 get 메서드 사용)
+        result = {
+            "longName": info.get("longName", "정보 없음"),
+            "sector": info.get("sector", "정보 없음"),
+            "industry": info.get("industry", "정보 없음"),
+            "marketCap": info.get("marketCap", 0),
+            "trailingPE": info.get("trailingPE", 0),
+            "dividendYield": info.get("dividendYield", 0),
+            "fiftyTwoWeekHigh": info.get("fiftyTwoWeekHigh", 0),
+            "fiftyTwoWeekLow": info.get("fiftyTwoWeekLow", 0),
+            "longBusinessSummary": info.get("longBusinessSummary", "설명이 없습니다.")
+        }
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # 2. 관심 종목 전체 조회
 @app.get("/watchlist")
 def get_watchlist(db: Session = Depends(get_db)):
