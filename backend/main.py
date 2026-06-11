@@ -179,5 +179,34 @@ def remove_from_watchlist(symbol: str, db: Session = Depends(get_db)):
         db.commit()
     return {"message": "Success"}
 
+@app.get("/market-indices")
+def get_market_indices():
+    indices = {
+        "^KS11": "코스피",
+        "^KQ11": "코스닥",
+        "^GSPC": "S&P 500",
+        "^IXIC": "나스닥"
+    }
+    results = []
+    for symbol, name in indices.items():
+        try:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period="2d")
+            if not data.empty:
+                cp = data['Close'].iloc[-1]
+                pc = data['Close'].iloc[-2] if len(data) > 1 else cp
+                ch = cp - pc
+                pct = (ch / pc) * 100 if pc != 0 else 0
+                results.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "price": round(cp, 2),
+                    "change": round(ch, 2),
+                    "changesPercentage": round(pct, 2)
+                })
+        except Exception as e:
+            logger.error(f"Index Error {symbol}: {str(e)}")
+    return results
+
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
