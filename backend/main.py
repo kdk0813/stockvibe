@@ -72,13 +72,22 @@ def get_stock_price(symbol: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/stock/{symbol}/history")
-def get_stock_history(symbol: str):
+def get_stock_history(symbol: str, period: str = "7d"):
     try:
         ticker = yf.Ticker(symbol)
-        data = ticker.history(period="7d")
+        # period에 따라 interval 조정 (1일치면 분 단위, 그 외에는 일 단위)
+        interval = "1m" if period == "1d" else "1d"
+        data = ticker.history(period=period, interval=interval)
+        
         if data.empty:
             return []
-        return [{"date": str(d.date()), "price": round(p, 2)} for d, p in zip(data.index, data['Close'])]
+        
+        results = []
+        for d, p in zip(data.index, data['Close']):
+            # 1일 데이터는 시간을 포함, 그 외는 날짜만 표시
+            date_str = d.strftime("%H:%M") if period == "1d" else str(d.date())
+            results.append({"date": date_str, "price": round(p, 2)})
+        return results
     except Exception as e:
         logger.error(f"History Error {symbol}: {str(e)}")
         return []

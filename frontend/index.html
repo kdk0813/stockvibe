@@ -73,6 +73,11 @@
         .news-title:hover { color: var(--accent-color); }
         .news-meta { font-size: 0.8em; color: var(--text-sub); }
         #status { font-size: 0.8em; color: var(--text-sub); margin-top: 10px; }
+
+        .period-selector { display: flex; gap: 5px; }
+        .period-btn { padding: 4px 10px; font-size: 0.75em; border-radius: 4px; border: 1px solid var(--border-color); background: var(--input-bg); color: var(--text-sub); cursor: pointer; }
+        .period-btn.active { background: var(--accent-color); color: white; border-color: var(--accent-color); }
+        .period-btn:hover:not(.active) { background: var(--border-color); }
     </style>
 </head>
 <body>
@@ -97,14 +102,28 @@
             <h4 id="detailTitle" style="text-align: center; margin-bottom: 5px; color: var(--accent-color);"></h4>
             <div id="companyName" style="text-align: center; color: var(--text-sub); font-size: 0.9em; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;"></div>
             <div class="metrics-grid" id="metricsGrid"></div>
-            <div style="margin-bottom: 30px;"><h5 style="margin-bottom: 10px;">📊 주가 추세 (7일)</h5><canvas id="stockChart"></canvas></div>
+            <div style="margin-bottom: 30px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h5 style="margin: 0;">📊 주가 추세</h5>
+                    <div class="period-selector" id="periodSelector">
+                        <button class="period-btn active" onclick="changePeriod('1d')">1일</button>
+                        <button class="period-btn" onclick="changePeriod('5d')">5일</button>
+                        <button class="period-btn" onclick="changePeriod('1mo')">1개월</button>
+                        <button class="period-btn" onclick="changePeriod('6mo')">6개월</button>
+                        <button class="period-btn" onclick="changePeriod('1y')">1년</button>
+                    </div>
+                </div>
+                <canvas id="stockChart"></canvas>
+            </div>
             <div><h5 style="margin-bottom: 10px;">📖 기업 개요</h5><div id="companySummary" class="summary-box"></div></div>
             <div><h5 style="margin-bottom: 10px;">📰 최신 뉴스</h5><div id="newsList"></div></div>
         </div>
     </div>
 
     <script>
-        const API_BASE = "http://localhost:8000"; // 127.0.0.1 대신 localhost 사용 시도
+        const API_BASE = "http://localhost:8000";
+        let stockChart = null;
+        let currentSymbol = "";
 
         // --- 테마 관리 ---
         function toggleTheme() {
@@ -123,11 +142,13 @@
         function updateChartColors(theme) {
             const textColor = theme === 'dark' ? '#bbbbbb' : '#666666';
             const gridColor = theme === 'dark' ? '#333333' : '#eeeeee';
-            stockChart.options.scales.x.ticks.color = textColor;
-            stockChart.options.scales.y.ticks.color = textColor;
-            stockChart.options.scales.x.grid.color = gridColor;
-            stockChart.options.scales.y.grid.color = gridColor;
-            stockChart.update();
+            if (stockChart) {
+                stockChart.options.scales.x.ticks.color = textColor;
+                stockChart.options.scales.y.ticks.color = textColor;
+                stockChart.options.scales.x.grid.color = gridColor;
+                stockChart.options.scales.y.grid.color = gridColor;
+                stockChart.update();
+            }
         }
 
         const savedTheme = localStorage.getItem('theme') || 'light';
@@ -211,10 +232,27 @@
         }
 
         async function showDetail(symbol) {
+            currentSymbol = symbol;
             document.getElementById('detailSection').style.display = 'block';
             document.getElementById('detailTitle').innerText = symbol;
-            await Promise.all([loadInfo(symbol), loadChart(symbol), loadNews(symbol)]);
+            
+            // 버튼 초기화 (1일 활성화)
+            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+            const firstBtn = document.querySelector('.period-btn');
+            if (firstBtn) firstBtn.classList.add('active');
+
+            await Promise.all([loadInfo(symbol), loadChart(symbol, '1d'), loadNews(symbol)]);
             document.getElementById('detailSection').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        async function changePeriod(period) {
+            if (!currentSymbol) return;
+            
+            // 버튼 활성화 상태 변경
+            document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            await loadChart(currentSymbol, period);
         }
 
         async function loadInfo(symbol) {
@@ -230,8 +268,8 @@
                 <div class="metric-box"><div class="metric-label">52주 최고/최저</div><div class="metric-value">${data.fiftyTwoWeekHigh} / ${data.fiftyTwoWeekLow}</div></div>`;
         }
 
-        async function loadChart(symbol) {
-            const data = await apiFetch(`/stock/${symbol}/history`);
+        async function loadChart(symbol, period = '1d') {
+            const data = await apiFetch(`/stock/${symbol}/history?period=${period}`);
             if (!data) return;
             const ctx = document.getElementById('stockChart').getContext('2d');
             const theme = document.documentElement.getAttribute('data-theme');
@@ -242,13 +280,13 @@
                 type: 'line',
                 data: {
                     labels: data.map(d => d.date),
-                    datasets: [{ label: '종가', data: data.map(d => d.price), borderColor: '#1a73e8', backgroundColor: 'rgba(26, 115, 232, 0.1)', fill: true, tension: 0.3 }]
+                    datasets: [{ label: '종가', data: data.map(d => d.price), borderColor: '#1a73e8', backgroundColor: 'rgba(26, 115, 232, 0.1)', fill: true, tension: 0.3, pointRadius: period === '1d' ? 0 : 2 }]
                 },
                 options: { 
                     responsive: true, 
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { ticks: { color: textColor }, grid: { color: gridColor } },
+                        x: { ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: gridColor } },
                         y: { ticks: { color: textColor }, grid: { color: gridColor } }
                     }
                 }
