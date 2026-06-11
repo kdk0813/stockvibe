@@ -207,6 +207,45 @@ def remove_from_watchlist(symbol: str, db: Session = Depends(get_db)):
         db.commit()
     return {"message": "Success"}
 
+@app.get("/market-movers")
+def get_market_movers():
+    try:
+        # 주요 감시 종목군 (KOSPI/NASDAQ 주요 종목 혼합)
+        major_tickers = [
+            "005930.KS", "000660.KS", "035420.KS", "035720.KS", "005380.KS", # 삼성, 하이닉스, 네이버, 카카오, 현대차
+            "AAPL", "TSLA", "NVDA", "MSFT", "GOOGL", "AMZN", "AMD" # 애플, 테슬라, 엔비디아 등
+        ]
+        
+        results = []
+        for symbol in major_tickers:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(period="2d")
+            if not data.empty:
+                cp = data['Close'].iloc[-1]
+                pc = data['Close'].iloc[-2] if len(data) > 1 else cp
+                ch = cp - pc
+                pct = (ch / pc) * 100 if pc != 0 else 0
+                
+                # 이름 가져오기 (캐싱 고려 안 함)
+                name = symbol.split('.')[0]
+                results.append({
+                    "symbol": symbol,
+                    "name": name,
+                    "price": round(cp, 2),
+                    "change": round(ch, 2),
+                    "changesPercentage": round(pct, 2)
+                })
+        
+        # 등락률 순으로 정렬
+        sorted_results = sorted(results, key=lambda x: x['changesPercentage'], reverse=True)
+        return {
+            "gainers": sorted_results[:5],
+            "losers": sorted_results[-5:][::-1]
+        }
+    except Exception as e:
+        logger.error(f"Market Movers Error: {str(e)}")
+        return {"gainers": [], "losers": []}
+
 @app.get("/market-indices")
 def get_market_indices():
     indices = {

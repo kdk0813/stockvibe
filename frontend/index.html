@@ -86,12 +86,18 @@
         .index-name { font-size: 0.8em; color: var(--text-sub); margin-bottom: 4px; }
         .index-price { font-weight: bold; font-size: 1.1em; margin-bottom: 2px; }
         .index-change { font-size: 0.85em; font-weight: 600; }
+
+        /* Movers 섹션 스타일 */
+        .movers-container { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+        .movers-list { background: var(--metric-bg); border-radius: 8px; padding: 10px; border: 1px solid var(--border-color); }
+        .movers-title { font-size: 0.8em; font-weight: bold; margin-bottom: 8px; color: var(--text-sub); display: flex; align-items: center; gap: 4px; }
+        .mover-item { display: flex; justify-content: space-between; font-size: 0.85em; padding: 4px 0; cursor: pointer; border-radius: 4px; padding: 4px 6px; }
+        .mover-item:hover { background: var(--card-bg); }
+        .mover-symbol { font-weight: bold; }
     </style>
 </head>
 <body>
-    <div class="index-bar" id="indexBar">
-        <!-- 지수 카드가 여기에 동적으로 추가됨 -->
-    </div>
+    <div class="index-bar" id="indexBar"></div>
     <div class="card">
         <div class="header">
             <h1>📈 StockVibe</h1>
@@ -102,6 +108,19 @@
             <button onclick="searchStock()">검색</button>
         </div>
         <div id="searchResults"></div>
+
+        <!-- 급등락 섹션 -->
+        <div class="movers-container" id="moversContainer">
+            <div class="movers-list">
+                <div class="movers-title">🚀 오늘의 급등주</div>
+                <div id="gainersList"></div>
+            </div>
+            <div class="movers-list">
+                <div class="movers-title">📉 오늘의 급락주</div>
+                <div id="losersList"></div>
+            </div>
+        </div>
+
         <div id="status">서버 연결 확인 중...</div>
     </div>
 
@@ -299,6 +318,28 @@
             });
         }
 
+        async function loadMarketMovers() {
+            const data = await apiFetch(`/market-movers`);
+            if (!data) return;
+
+            const renderMovers = (list, containerId) => {
+                const container = document.getElementById(containerId);
+                container.innerHTML = "";
+                list.forEach(item => {
+                    const colorClass = item.change > 0 ? 'up' : (item.change < 0 ? 'down' : '');
+                    const sign = item.change > 0 ? '+' : '';
+                    container.innerHTML += `
+                        <div class="mover-item" onclick="showDetail('${item.symbol}')">
+                            <span class="mover-symbol">${item.name}</span>
+                            <span class="${colorClass}">${sign}${item.changesPercentage}%</span>
+                        </div>`;
+                });
+            };
+
+            renderMovers(data.gainers, 'gainersList');
+            renderMovers(data.losers, 'losersList');
+        }
+
         async function showDetail(symbol) {
             currentSymbol = symbol;
             document.getElementById('detailSection').style.display = 'block';
@@ -460,8 +501,10 @@
 
         loadWatchlist();
         loadMarketIndices();
+        loadMarketMovers();
         setInterval(loadWatchlist, 60000);
         setInterval(loadMarketIndices, 60000);
+        setInterval(loadMarketMovers, 300000); // 5분마다 갱신
     </script>
 </body>
 </html>
