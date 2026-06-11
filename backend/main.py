@@ -2,7 +2,7 @@ import logging
 import sys
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy import create_engine, Column, Integer, String, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 import yfinance as yf
@@ -26,6 +26,8 @@ class Watchlist(Base):
     __tablename__ = "watchlist"
     id = Column(Integer, primary_key=True, index=True)
     symbol = Column(String, unique=True, index=True)
+    purchase_price = Column(Float, default=0.0) # 매수 단가
+    quantity = Column(Integer, default=0)       # 보유 수량
 
 Base.metadata.create_all(bind=engine)
 
@@ -149,17 +151,33 @@ def get_watchlist(db: Session = Depends(get_db)):
     for item in items:
         try:
             ticker = yf.Ticker(item.symbol)
-            data = ticker.history(period="2d")
+            data = ticker.history(period="1d")
             if not data.empty:
                 cp = data['Close'].iloc[-1]
-                pc = data['Close'].iloc[-2] if len(data) > 1 else cp
+                pc = data['Open'].iloc[-1] # 당일 시가 기준 변동 계산
                 ch = cp - pc
                 pct = (ch / pc) * 100 if pc != 0 else 0
-                results.append({"symbol": item.symbol, "price": round(cp, 2), "change": round(ch, 2), "changesPercentage": round(pct, 2)})
+                
+                # 포트폴리오 계산
+                total_cost = item.purchase_price * item.quantity
+                total_value = cp * item.quantity
+                profit = total_value - total_cost if item.quantity > 0 else 0
+                return_pct = (profit / total_cost * 100) if total_cost > 0 else 0
+                
+                results.append({
+                    "symbol": item.symbol, 
+                    "price": round(cp, 2), 
+                    "change": round(ch, 2), 
+                    "changesPercentage": round(pct, 2),
+                    "purchase_price": item.purchase_price,
+                    "quantity": item.quantity,
+                    "profit": round(profit, 2),
+                    "returnPercentage": round(return_pct, 2)
+                })
             else:
-                results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0})
+                results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0, "purchase_price": item.purchase_price, "quantity": item.quantity, "profit": 0, "returnPercentage": 0})
         except Exception:
-            results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0})
+            results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0, "purchase_price": item.purchase_price, "quantity": item.quantity, "profit": 0, "returnPercentage": 0})
     return results
 
 @app.post("/watchlist/{symbol}")
@@ -170,6 +188,16 @@ def add_to_watchlist(symbol: str, db: Session = Depends(get_db)):
         db.add(new_item)
         db.commit()
     return {"message": "Success"}
+
+@app.post("/portfolio/{symbol}")
+def update_portfolio(symbol: str, purchase_price: float, quantity: int, db: Session = Depends(get_db)):
+    db_item = db.query(Watchlist).filter(Watchlist.symbol == symbol.upper()).first()
+    if db_item:
+        db_item.purchase_price = purchase_price
+        db_item.quantity = quantity
+        db.commit()
+        return {"message": "Success"}
+    raise HTTPException(status_code=404, detail="Stock not in watchlist")
 
 @app.delete("/watchlist/{symbol}")
 def remove_from_watchlist(symbol: str, db: Session = Depends(get_db)):

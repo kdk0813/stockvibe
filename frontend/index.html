@@ -113,6 +113,16 @@
             <h4 id="detailTitle" style="text-align: center; margin-bottom: 5px; color: var(--accent-color);"></h4>
             <div id="companyName" style="text-align: center; color: var(--text-sub); font-size: 0.9em; margin-bottom: 20px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;"></div>
             <div class="metrics-grid" id="metricsGrid"></div>
+            
+            <div id="portfolioSettings" style="margin-bottom: 25px; padding: 15px; border: 1px dashed var(--border-color); border-radius: 8px;">
+                <h5 style="margin-top:0; margin-bottom:10px;">💰 내 매수 정보 설정</h5>
+                <div style="display:flex; gap:10px;">
+                    <input type="number" id="purchasePriceInput" placeholder="매수 단가" style="padding:8px;">
+                    <input type="number" id="quantityInput" placeholder="보유 수량" style="padding:8px;">
+                    <button onclick="updatePortfolio()" style="padding:8px 15px; background:#34a853;">저장</button>
+                </div>
+            </div>
+
             <div style="margin-bottom: 30px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
                     <h5 style="margin: 0;">📊 주가 추세</h5>
@@ -227,9 +237,23 @@
                 const isUp = item.change > 0;
                 const colorClass = isUp ? 'up' : (item.change < 0 ? 'down' : '');
                 const sign = isUp ? '+' : '';
+                
+                // 포트폴리오 정보 (수익률)
+                let portfolioHtml = "";
+                if (item.quantity > 0) {
+                    const profitClass = item.profit >= 0 ? 'up' : 'down';
+                    const profitSign = item.profit >= 0 ? '+' : '';
+                    portfolioHtml = `<div style="font-size: 0.8em; margin-top: 4px;" class="${profitClass}">
+                        수익: ${profitSign}${item.profit.toLocaleString()} (${profitSign}${item.returnPercentage}%)
+                    </div>`;
+                }
+
                 listDiv.innerHTML += `
                     <div class="watchlist-item" onclick="showDetail('${item.symbol}')">
-                        <div class="symbol-info"><span class="symbol-name">${item.symbol}</span></div>
+                        <div class="symbol-info">
+                            <span class="symbol-name">${item.symbol}</span>
+                            ${portfolioHtml}
+                        </div>
                         <div style="display:flex; align-items:center;">
                             <div style="text-align:right;">
                                 <div class="price">${item.price.toLocaleString()}</div>
@@ -240,6 +264,20 @@
                     </div>`;
             });
             statusDiv.innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
+        }
+
+        async function updatePortfolio() {
+            if (!currentSymbol) return;
+            const price = document.getElementById('purchasePriceInput').value;
+            const qty = document.getElementById('quantityInput').value;
+            
+            const res = await apiFetch(`/portfolio/${currentSymbol}?purchase_price=${price}&quantity=${qty}`, { method: 'POST' });
+            if (res) {
+                alert("포트폴리오 정보가 저장되었습니다.");
+                loadWatchlist();
+            } else {
+                alert("저장에 실패했습니다.");
+            }
         }
 
         async function loadMarketIndices() {
@@ -266,6 +304,16 @@
             document.getElementById('detailSection').style.display = 'block';
             document.getElementById('detailTitle').innerText = symbol;
             
+            // 기존 포트폴리오 정보 채우기
+            const watchlistData = await apiFetch(`/watchlist`);
+            if (watchlistData) {
+                const item = watchlistData.find(i => i.symbol === symbol);
+                if (item) {
+                    document.getElementById('purchasePriceInput').value = item.purchase_price || "";
+                    document.getElementById('quantityInput').value = item.quantity || "";
+                }
+            }
+
             // 버튼 초기화 (1일 활성화)
             document.querySelectorAll('.period-btn').forEach(btn => btn.classList.remove('active'));
             const firstBtn = document.querySelector('.period-btn');
