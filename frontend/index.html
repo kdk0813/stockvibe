@@ -94,6 +94,27 @@
         .mover-item { display: flex; justify-content: space-between; font-size: 0.85em; padding: 4px 0; cursor: pointer; border-radius: 4px; padding: 4px 6px; }
         .mover-item:hover { background: var(--card-bg); }
         .mover-symbol { font-weight: bold; }
+
+        /* 포트폴리오 요약 카드 스타일 */
+        .total-summary-card {
+            background: var(--accent-color);
+            color: white;
+            padding: 20px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(26, 115, 232, 0.3);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .total-summary-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .total-summary-label { font-size: 0.9em; opacity: 0.9; }
+        .total-summary-value { font-size: 1.4em; font-weight: bold; }
+        .total-summary-sub { font-size: 0.85em; opacity: 0.85; text-align: right; }
     </style>
 </head>
 <body>
@@ -126,6 +147,22 @@
 
     <div class="card">
         <h3 style="margin-top:0">⭐ 내 관심 종목</h3>
+        
+        <!-- 전체 포트폴리오 요약 추가 -->
+        <div id="totalSummary" class="total-summary-card" style="display:none;">
+            <div class="total-summary-row">
+                <span class="total-summary-label">총 자산</span>
+                <span id="totalValue" class="total-summary-value">0</span>
+            </div>
+            <div class="total-summary-row">
+                <span class="total-summary-label">총 수익</span>
+                <div style="text-align:right;">
+                    <span id="totalProfit" class="total-summary-value" style="font-size: 1.1em;">0</span>
+                    <div id="totalReturn" class="total-summary-sub">0%</div>
+                </div>
+            </div>
+        </div>
+
         <div id="watchlist">로딩 중...</div>
         
         <div id="detailSection" style="display:none; margin-top: 20px;">
@@ -251,6 +288,11 @@
                 return;
             }
 
+            // --- 요약 정보 계산 ---
+            let totalCost = 0;
+            let totalValue = 0;
+            let hasPortfolio = false;
+
             listDiv.innerHTML = data.length ? "" : "관심 종목이 없습니다. 검색하여 추가해 보세요.";
             data.forEach(item => {
                 const isUp = item.change > 0;
@@ -260,6 +302,10 @@
                 // 포트폴리오 정보 (수익률)
                 let portfolioHtml = "";
                 if (item.quantity > 0) {
+                    hasPortfolio = true;
+                    totalCost += item.purchase_price * item.quantity;
+                    totalValue += item.price * item.quantity;
+
                     const profitClass = item.profit >= 0 ? 'up' : 'down';
                     const profitSign = item.profit >= 0 ? '+' : '';
                     portfolioHtml = `<div style="font-size: 0.8em; margin-top: 4px;" class="${profitClass}">
@@ -282,6 +328,22 @@
                         </div>
                     </div>`;
             });
+
+            // --- 요약 UI 업데이트 ---
+            const summaryDiv = document.getElementById('totalSummary');
+            if (hasPortfolio) {
+                const totalProfit = totalValue - totalCost;
+                const totalReturn = totalCost > 0 ? (totalProfit / totalCost * 100).toFixed(2) : 0;
+                const profitSign = totalProfit >= 0 ? '+' : '';
+                
+                document.getElementById('totalValue').innerText = `₩${totalValue.toLocaleString()}`;
+                document.getElementById('totalProfit').innerText = `${profitSign}₩${totalProfit.toLocaleString()}`;
+                document.getElementById('totalReturn').innerText = `수익률: ${profitSign}${totalReturn}%`;
+                summaryDiv.style.display = 'flex';
+            } else {
+                summaryDiv.style.display = 'none';
+            }
+
             statusDiv.innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
         }
 
