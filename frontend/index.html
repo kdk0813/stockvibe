@@ -494,6 +494,7 @@
             const gridColor = theme === 'dark' ? '#333333' : '#eeeeee';
             
             const prices = data.map(d => d.price);
+            const rsiValues = data.map(d => d.rsi);
             const datasets = [
                 { 
                     label: '종가', 
@@ -503,17 +504,30 @@
                     fill: true, 
                     tension: 0.3, 
                     pointRadius: period === '1d' ? 0 : 2,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    yAxisID: 'y'
                 }
             ];
 
-            // 1일 차트가 아닐 때만 이동평균선 추가 (일봉 기준)
+            // RSI 데이터셋 추가 (항상 표시)
+            datasets.push({
+                label: 'RSI(14)',
+                data: rsiValues,
+                borderColor: '#ff4081',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: false,
+                tension: 0.4,
+                yAxisID: 'yRSI'
+            });
+
+            // 1일 차트가 아닐 때만 이동평균선 추가
             if (period !== '1d') {
                 datasets.push({
                     label: '5MA',
                     data: calculateMA(prices, 5),
                     borderColor: '#ff9800',
-                    borderWidth: 1.5,
+                    borderWidth: 1,
                     pointRadius: 0,
                     fill: false,
                     tension: 0.4
@@ -522,22 +536,11 @@
                     label: '20MA',
                     data: calculateMA(prices, 20),
                     borderColor: '#9c27b0',
-                    borderWidth: 1.5,
+                    borderWidth: 1,
                     pointRadius: 0,
                     fill: false,
                     tension: 0.4
                 });
-                if (prices.length >= 60) {
-                    datasets.push({
-                        label: '60MA',
-                        data: calculateMA(prices, 60),
-                        borderColor: '#4caf50',
-                        borderWidth: 1.5,
-                        pointRadius: 0,
-                        fill: false,
-                        tension: 0.4
-                    });
-                }
             }
 
             if (stockChart) stockChart.destroy();
@@ -549,15 +552,28 @@
                 },
                 options: { 
                     responsive: true, 
+                    interaction: { mode: 'index', intersect: false },
                     plugins: { 
                         legend: { 
-                            display: period !== '1d', // 1일 차트는 종가만 있으므로 범례 숨김
-                            labels: { color: textColor, boxWidth: 12, font: { size: 10 } }
+                            labels: { color: textColor, boxWidth: 10, font: { size: 10 } }
                         } 
                     },
                     scales: {
                         x: { ticks: { color: textColor, maxRotation: 0, autoSkip: true, maxTicksLimit: 8 }, grid: { color: gridColor } },
-                        y: { ticks: { color: textColor }, grid: { color: gridColor } }
+                        y: { 
+                            position: 'left',
+                            ticks: { color: textColor }, 
+                            grid: { color: gridColor },
+                            title: { display: true, text: '가격', color: textColor }
+                        },
+                        yRSI: {
+                            position: 'right',
+                            min: 0,
+                            max: 100,
+                            ticks: { color: '#ff4081', stepSize: 30 },
+                            grid: { drawOnChartArea: false },
+                            title: { display: true, text: 'RSI', color: '#ff4081' }
+                        }
                     }
                 }
             });

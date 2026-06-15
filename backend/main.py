@@ -74,22 +74,55 @@ def get_stock_price(symbol: str):
         logger.error(f"Price Error {symbol}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+def calculate_rsi(prices, period=14):
+    if len(prices) < period:
+        return [None] * len(prices)
+    
+    import pandas as pd
+    delta = pd.Series(prices).diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
+    
+    rs = gain / loss
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.fillna(0).tolist()
+
 @app.get("/stock/{symbol}/history")
 def get_stock_history(symbol: str, period: str = "7d"):
     try:
         ticker = yf.Ticker(symbol)
-        # period에 따라 interval 조정 (1일치면 분 단위, 그 외에는 일 단위)
+        # RSI 계산을 위해 요청한 기간보다 조금 더 긴 데이터를 가져옴
+        fetch_period = "1mo" if period in ["1d", "5d", "7d"] else "1y"
         interval = "1m" if period == "1d" else "1d"
-        data = ticker.history(period=period, interval=interval)
+        data = ticker.history(period=fetch_period, interval=interval)
         
         if data.empty:
             return []
         
+        # RSI 계산
+        prices = data['Close'].tolist()
+        rsi_values = calculate_rsi(prices)
+        
+        # 사용자가 요청한 기간만큼 자르기
+        # period에 따른 데이터 개수 대략적 계산
+        if period == "1d": limit = 390 # 장중 분봉 대략 개수
+        elif period == "5d": limit = 5
+        elif period == "1mo": limit = 20
+        elif period == "6mo": limit = 120
+        else: limit = len(data)
+        
         results = []
-        for d, p in zip(data.index, data['Close']):
-            # 1일 데이터는 시간을 포함, 그 외는 날짜만 표시
+        # 최근 데이터부터 limit만큼 추출
+        display_data = data.iloc[-limit:]
+        display_rsi = rsi_values[-limit:]
+        
+        for (d, p), r in zip(zip(display_data.index, display_data['Close']), display_rsi):
             date_str = d.strftime("%H:%M") if period == "1d" else str(d.date())
-            results.append({"date": date_str, "price": round(p, 2)})
+            results.append({
+                "date": date_str, 
+                "price": round(p, 2),
+                "rsi": round(r, 2) if r is not None else 0
+            })
         return results
     except Exception as e:
         logger.error(f"History Error {symbol}: {str(e)}")
