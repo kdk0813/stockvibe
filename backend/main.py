@@ -252,7 +252,10 @@ def get_market_indices():
         "^KS11": "코스피",
         "^KQ11": "코스닥",
         "^GSPC": "S&P 500",
-        "^IXIC": "나스닥"
+        "^IXIC": "나스닥",
+        "USDKRW=X": "원/달러 환율",
+        "GC=F": "금 (선물)",
+        "BTC-USD": "비트코인"
     }
     results = []
     for symbol, name in indices.items():
