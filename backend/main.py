@@ -28,6 +28,7 @@ class Watchlist(Base):
     symbol = Column(String, unique=True, index=True)
     purchase_price = Column(Float, default=0.0) # 매수 단가
     quantity = Column(Integer, default=0)       # 보유 수량
+    target_price = Column(Float, default=0.0)   # 목표가
 
 Base.metadata.create_all(bind=engine)
 
@@ -171,13 +172,14 @@ def get_watchlist(db: Session = Depends(get_db)):
                     "changesPercentage": round(pct, 2),
                     "purchase_price": item.purchase_price,
                     "quantity": item.quantity,
+                    "target_price": item.target_price,
                     "profit": round(profit, 2),
                     "returnPercentage": round(return_pct, 2)
                 })
             else:
-                results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0, "purchase_price": item.purchase_price, "quantity": item.quantity, "profit": 0, "returnPercentage": 0})
+                results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0, "purchase_price": item.purchase_price, "quantity": item.quantity, "target_price": item.target_price, "profit": 0, "returnPercentage": 0})
         except Exception:
-            results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0, "purchase_price": item.purchase_price, "quantity": item.quantity, "profit": 0, "returnPercentage": 0})
+            results.append({"symbol": item.symbol, "price": 0, "change": 0, "changesPercentage": 0, "purchase_price": item.purchase_price, "quantity": item.quantity, "target_price": item.target_price, "profit": 0, "returnPercentage": 0})
     return results
 
 @app.post("/watchlist/{symbol}")
@@ -190,11 +192,12 @@ def add_to_watchlist(symbol: str, db: Session = Depends(get_db)):
     return {"message": "Success"}
 
 @app.post("/portfolio/{symbol}")
-def update_portfolio(symbol: str, purchase_price: float, quantity: int, db: Session = Depends(get_db)):
+def update_portfolio(symbol: str, purchase_price: float, quantity: int, target_price: float = 0.0, db: Session = Depends(get_db)):
     db_item = db.query(Watchlist).filter(Watchlist.symbol == symbol.upper()).first()
     if db_item:
         db_item.purchase_price = purchase_price
         db_item.quantity = quantity
+        db_item.target_price = target_price
         db.commit()
         return {"message": "Success"}
     raise HTTPException(status_code=404, detail="Stock not in watchlist")

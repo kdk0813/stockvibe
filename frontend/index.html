@@ -171,11 +171,12 @@
             <div class="metrics-grid" id="metricsGrid"></div>
             
             <div id="portfolioSettings" style="margin-bottom: 25px; padding: 15px; border: 1px dashed var(--border-color); border-radius: 8px;">
-                <h5 style="margin-top:0; margin-bottom:10px;">💰 내 매수 정보 설정</h5>
-                <div style="display:flex; gap:10px;">
-                    <input type="number" id="purchasePriceInput" placeholder="매수 단가" style="padding:8px;">
-                    <input type="number" id="quantityInput" placeholder="보유 수량" style="padding:8px;">
-                    <button onclick="updatePortfolio()" style="padding:8px 15px; background:#34a853;">저장</button>
+                <h5 style="margin-top:0; margin-bottom:10px;">💰 내 매수 정보 및 목표가 설정</h5>
+                <div style="display:flex; flex-wrap:wrap; gap:10px;">
+                    <input type="number" id="purchasePriceInput" placeholder="매수 단가" style="padding:8px; flex:1; min-width:120px;">
+                    <input type="number" id="quantityInput" placeholder="보유 수량" style="padding:8px; flex:1; min-width:120px;">
+                    <input type="number" id="targetPriceInput" placeholder="목표가 설정" style="padding:8px; flex:1; min-width:120px;">
+                    <button onclick="updatePortfolio()" style="padding:8px 15px; background:#34a853; width:100%;">저장</button>
                 </div>
             </div>
 
@@ -288,7 +289,7 @@
                 return;
             }
 
-            // --- 요약 정보 계산 ---
+            // --- 요약 정보 계산 및 알림 확인 ---
             let totalCost = 0;
             let totalValue = 0;
             let hasPortfolio = false;
@@ -299,6 +300,11 @@
                 const colorClass = isUp ? 'up' : (item.change < 0 ? 'down' : '');
                 const sign = isUp ? '+' : '';
                 
+                // 목표가 알림 체크
+                if (item.target_price > 0 && item.price >= item.target_price) {
+                    showNotification(`🎯 목표가 도달!`, `${item.symbol} 현재가(${item.price})가 목표가(${item.target_price})에 도달했습니다.`);
+                }
+
                 // 포트폴리오 정보 (수익률)
                 let portfolioHtml = "";
                 if (item.quantity > 0) {
@@ -313,6 +319,9 @@
                     </div>`;
                 }
 
+                // 목표가 표시
+                const targetHtml = item.target_price > 0 ? `<div style="font-size:0.75em; color:var(--text-sub);">목표: ${item.target_price.toLocaleString()}</div>` : "";
+
                 listDiv.innerHTML += `
                     <div class="watchlist-item" onclick="showDetail('${item.symbol}')">
                         <div class="symbol-info">
@@ -323,6 +332,7 @@
                             <div style="text-align:right;">
                                 <div class="price">${item.price.toLocaleString()}</div>
                                 <div class="${colorClass}">${sign}${item.change.toLocaleString()} (${sign}${item.changesPercentage}%)</div>
+                                ${targetHtml}
                             </div>
                             <button class="action-btn delete-btn" style="margin-left:15px;" onclick="event.stopPropagation(); removeFromWatchlist('${item.symbol}')">삭제</button>
                         </div>
@@ -345,6 +355,19 @@
             }
 
             statusDiv.innerText = `최근 업데이트: ${new Date().toLocaleTimeString()}`;
+        }
+
+        function showNotification(title, body) {
+            // 브라우저 알림 권한 확인 및 요청
+            if (Notification.permission === "granted") {
+                new Notification(title, { body: body, icon: "https://cdn-icons-png.flaticon.com/512/1828/1828884.png" });
+            } else if (Notification.permission !== "denied") {
+                Notification.requestPermission().then(permission => {
+                    if (permission === "granted") showNotification(title, body);
+                });
+            }
+            // 알림 권한이 없더라도 콘솔과 화면에 로그 남김
+            console.log(`[ALERT] ${title}: ${body}`);
         }
 
         async function updatePortfolio() {
